@@ -1,0 +1,166 @@
+{
+  "Options Section": {
+    "prefix": "options",
+    "body": [
+      "[OPTIONS]",
+      "enable: ${1|0,1|}",
+      "policy_in: ${2|DROP,ACCEPT,REJECT|}",
+      "policy_out: ${3|ACCEPT,DROP,REJECT|}",
+      "$0"
+    ],
+    "description": "Insert an [OPTIONS] section with common defaults"
+  },
+  "Rules Section": {
+    "prefix": "rules",
+    "body": [
+      "[RULES]",
+      "$0"
+    ],
+    "description": "Insert a [RULES] section"
+  },
+  "Aliases Section": {
+    "prefix": "aliases",
+    "body": [
+      "[ALIASES]",
+      "${1:alias_name} ${2:192.168.1.0/24}",
+      "$0"
+    ],
+    "description": "Insert an [ALIASES] section"
+  },
+  "IPSet Section": {
+    "prefix": "ipset",
+    "body": [
+      "[IPSET ${1:name}]",
+      "${2:192.168.1.0/24}",
+      "$0"
+    ],
+    "description": "Insert an [IPSET name] section"
+  },
+  "Security Group Section": {
+    "prefix": "group",
+    "body": [
+      "[group ${1:name}]",
+      "IN ${2|ACCEPT,DROP,REJECT|} -p ${3|tcp,udp|} -dport ${4:80}",
+      "$0"
+    ],
+    "description": "Insert a [group name] section"
+  },
+  "Allow SSH": {
+    "prefix": "ssh",
+    "body": "IN SSH(ACCEPT)${1: -source ${2:192.168.1.0/24}}$0",
+    "description": "Allow incoming SSH traffic"
+  },
+  "Allow HTTP": {
+    "prefix": "http",
+    "body": "IN HTTP(ACCEPT)${1: -source ${2:+management}}$0",
+    "description": "Allow incoming HTTP traffic"
+  },
+  "Allow HTTPS": {
+    "prefix": "https",
+    "body": "IN HTTPS(ACCEPT)${1: -source ${2:+management}}$0",
+    "description": "Allow incoming HTTPS traffic"
+  },
+  "Allow DNS": {
+    "prefix": "dns",
+    "body": "OUT DNS(ACCEPT)$0",
+    "description": "Allow outgoing DNS traffic"
+  },
+  "Allow Ping": {
+    "prefix": "ping",
+    "body": "IN Ping(ACCEPT)${1: -source ${2:+management}}$0",
+    "description": "Allow incoming ICMP ping"
+  },
+  "Accept Rule": {
+    "prefix": "in-accept",
+    "body": "IN ACCEPT -p ${1|tcp,udp|} -dport ${2:port}${3: -source ${4:source}}$0",
+    "description": "Accept incoming traffic on a specific port"
+  },
+  "Drop Rule": {
+    "prefix": "in-drop",
+    "body": "IN DROP${1: -p ${2|tcp,udp|}${3: -dport ${4:port}}}$0",
+    "description": "Drop incoming traffic"
+  },
+  "Outgoing Accept Rule": {
+    "prefix": "out-accept",
+    "body": "OUT ACCEPT -p ${1|tcp,udp|} -dport ${2:port}${3: -dest ${4:dest}}$0",
+    "description": "Accept outgoing traffic on a specific port"
+  },
+  "Group Reference": {
+    "prefix": "groupref",
+    "body": "GROUP ${1:groupname}$0",
+    "description": "Reference a security group in a RULES section"
+  },
+  "Webserver Group": {
+    "prefix": "group-web",
+    "body": [
+      "[group ${1:webserver}]",
+      "IN HTTP(ACCEPT)",
+      "IN HTTPS(ACCEPT)",
+      "$0"
+    ],
+    "description": "Security group for a typical web server"
+  },
+  "Management Group": {
+    "prefix": "group-mgmt",
+    "body": [
+      "[group ${1:management}]",
+      "IN SSH(ACCEPT) -source +management",
+      "IN ACCEPT -p tcp -dport 8006 -source +management # PVE GUI",
+      "IN Ping(ACCEPT) -source +management",
+      "$0"
+    ],
+    "description": "Security group for PVE management access"
+  },
+  "Disabled Rule": {
+    "prefix": "disabled",
+    "body": "|${1:IN} ${2:ACCEPT} -p ${3:tcp} -dport ${4:port} # disabled$0",
+    "description": "Insert a disabled firewall rule"
+  },
+  "VM Firewall Template": {
+    "prefix": "vm-fw",
+    "body": [
+      "[OPTIONS]",
+      "enable: 1",
+      "policy_in: DROP",
+      "policy_out: ACCEPT",
+      "",
+      "[RULES]",
+      "GROUP ${1:webserver}",
+      "IN SSH(ACCEPT) -source +management",
+      "IN Ping(ACCEPT)",
+      "$0"
+    ],
+    "description": "Full VM/CT firewall template with default-deny inbound"
+  },
+  "Cluster Firewall Template": {
+    "prefix": "cluster-fw",
+    "body": [
+      "[OPTIONS]",
+      "enable: 1",
+      "policy_in: DROP",
+      "policy_out: ACCEPT",
+      "",
+      "[ALIASES]",
+      "local_network ${1:192.168.1.0/24}",
+      "",
+      "[IPSET management]",
+      "${2:192.168.1.0/24}",
+      "",
+      "[IPSET blacklist]",
+      "",
+      "[group webserver]",
+      "IN HTTP(ACCEPT)",
+      "IN HTTPS(ACCEPT)",
+      "",
+      "[group mgmt-access]",
+      "IN SSH(ACCEPT) -source +management",
+      "IN ACCEPT -p tcp -dport 8006 -source +management # PVE GUI",
+      "IN Ping(ACCEPT) -source +management",
+      "",
+      "[RULES]",
+      "GROUP mgmt-access",
+      "$0"
+    ],
+    "description": "Full cluster.fw template with management access"
+  }
+}

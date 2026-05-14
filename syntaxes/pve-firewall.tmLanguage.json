@@ -1,0 +1,210 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "PVE Firewall",
+  "scopeName": "source.pve-firewall",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#section-header" },
+    { "include": "#group-reference" },
+    { "include": "#disabled-rule" },
+    { "include": "#firewall-rule" },
+    { "include": "#option-line" },
+    { "include": "#ipset-entry" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "(#.*)$",
+      "name": "comment.line.number-sign.pve-firewall"
+    },
+
+    "section-header": {
+      "patterns": [
+        {
+          "comment": "Section headers: [OPTIONS], [RULES], [ALIASES], [IPSET name], [GROUP name], [group name]",
+          "match": "^\\s*(\\[)\\s*(OPTIONS|RULES|ALIASES)\\s*(\\])",
+          "captures": {
+            "1": { "name": "punctuation.definition.section.begin.pve-firewall" },
+            "2": { "name": "entity.name.section.pve-firewall" },
+            "3": { "name": "punctuation.definition.section.end.pve-firewall" }
+          }
+        },
+        {
+          "comment": "IPSET section with name: [IPSET name]",
+          "match": "^\\s*(\\[)\\s*(IPSET)\\s+(\\S+)\\s*(\\])",
+          "captures": {
+            "1": { "name": "punctuation.definition.section.begin.pve-firewall" },
+            "2": { "name": "entity.name.section.pve-firewall" },
+            "3": { "name": "entity.name.tag.ipset-name.pve-firewall" },
+            "4": { "name": "punctuation.definition.section.end.pve-firewall" }
+          }
+        },
+        {
+          "comment": "GROUP / group section with name: [GROUP name] or [group name]",
+          "match": "^\\s*(\\[)\\s*([Gg][Rr][Oo][Uu][Pp])\\s+(\\S+)\\s*(\\])",
+          "captures": {
+            "1": { "name": "punctuation.definition.section.begin.pve-firewall" },
+            "2": { "name": "entity.name.section.pve-firewall" },
+            "3": { "name": "entity.name.tag.group-name.pve-firewall" },
+            "4": { "name": "punctuation.definition.section.end.pve-firewall" }
+          }
+        }
+      ]
+    },
+
+    "group-reference": {
+      "comment": "GROUP reference in RULES section: GROUP groupname",
+      "match": "^\\s*(GROUP)\\s+(\\S+)",
+      "captures": {
+        "1": { "name": "keyword.control.group-ref.pve-firewall" },
+        "2": { "name": "entity.name.tag.group-name.pve-firewall" }
+      }
+    },
+
+    "disabled-rule": {
+      "comment": "Disabled rule prefixed with |",
+      "match": "^\\s*(\\|)(.*)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.disabled.pve-firewall" },
+        "2": { "name": "comment.block.disabled-rule.pve-firewall" }
+      }
+    },
+
+    "firewall-rule": {
+      "comment": "Firewall rule: DIRECTION [MACRO(]ACTION[)] [options]",
+      "begin": "^\\s*(?=(?:IN|OUT|FORWARD)\\b)",
+      "end": "(?=$|#)",
+      "patterns": [
+        { "include": "#rule-direction" },
+        { "include": "#rule-macro-action" },
+        { "include": "#rule-action" },
+        { "include": "#rule-options" }
+      ]
+    },
+
+    "rule-direction": {
+      "match": "\\b(IN|OUT|FORWARD)\\b",
+      "name": "keyword.control.direction.pve-firewall"
+    },
+
+    "rule-macro-action": {
+      "comment": "Macro with action: MACRO(ACTION)",
+      "match": "\\b(Amanda|Auth|BGP|BitTorrent32|BitTorrent|CVS|Ceph|Citrix|DAAP|DCC|DHCPfwd|DHCPv6|DNS|Distcc|FTP|Finger|GNUnet|GRE|Git|HKP|HTTPS|HTTP|ICPV2|ICQ|IMAPS|IMAP|IPIP|IPsecah|IPsecnat|IPsec|IRC|Jetdirect|LDAPS|LDAP|MDNS|MSNP|MSSQL|Mail|MySQL|NNTP|NNTPS|NTP|NTPbrd|OpenVPN|OSPF|OpenTrackerHTTP|PCAnywhere|PMG|POP3S|POP3|PPtP|Ping|PostgreSQL|Printer|RDP|RIP|RNDC|Razor|Rdate|Rsync|SANE|SMB|SMBS|SMTP|SMTPS|SNMP|SPAMD|SPICEproxy|SSH|SVN|SixXS|Squid|Submission|Syslog|TFTP|Telnet|Telnets|Traceroute|VNC|VNCL|Web|Webcache|Webmin|Whois)\\s*(\\()\\s*(ACCEPT|DROP|REJECT)\\s*(\\))",
+      "captures": {
+        "1": { "name": "support.function.macro.pve-firewall" },
+        "2": { "name": "punctuation.definition.arguments.begin.pve-firewall" },
+        "3": { "name": "constant.language.action.pve-firewall" },
+        "4": { "name": "punctuation.definition.arguments.end.pve-firewall" }
+      }
+    },
+
+    "rule-action": {
+      "comment": "Standalone action: ACCEPT, DROP, REJECT",
+      "match": "\\b(ACCEPT|DROP|REJECT)\\b",
+      "name": "constant.language.action.pve-firewall"
+    },
+
+    "rule-options": {
+      "patterns": [
+        {
+          "comment": "Option flags: -p, -dport, -sport, -source, -dest, -i, -log, -iface, -proto, -icmp-type",
+          "match": "\\s(-(?:p|proto|dport|sport|source|dest|i|iface|log|icmp-type))\\b",
+          "captures": {
+            "1": { "name": "entity.other.attribute-name.option.pve-firewall" }
+          }
+        },
+        {
+          "comment": "Log levels",
+          "match": "\\b(alert|crit|debug|emerg|err|info|nolog|notice|warning)\\b",
+          "name": "support.constant.loglevel.pve-firewall"
+        },
+        {
+          "comment": "Protocol names",
+          "match": "\\b(tcp|udp|icmp|icmpv6|ipv6-icmp)\\b",
+          "name": "support.constant.protocol.pve-firewall"
+        },
+        { "include": "#ip-address" },
+        { "include": "#ipset-reference" },
+        { "include": "#port-number" },
+        { "include": "#alias-reference" }
+      ]
+    },
+
+    "option-line": {
+      "comment": "Key-value option: key: value",
+      "match": "^\\s*(enable|ebtables|policy_in|policy_out|policy_forward|log_ratelimit|log_level_in|log_level_out|log_level_forward|log_nf_conntrack|ndp|nf_conntrack_allow_invalid|nf_conntrack_helpers|nf_conntrack_max|nf_conntrack_tcp_timeout_established|nf_conntrack_tcp_timeout_syn_recv|nftables|nosmurfs|protection_synflood|protection_synflood_burst|protection_synflood_rate|smurf_log_level|tcp_flags_log_level|tcpflags|dhcp|ipfilter|macfilter|radv|ips|ips_queues)\\s*(:)\\s*(.*?)\\s*(?=#|$)",
+      "captures": {
+        "1": { "name": "variable.other.option-key.pve-firewall" },
+        "2": { "name": "punctuation.separator.key-value.pve-firewall" },
+        "3": { "name": "constant.other.option-value.pve-firewall" }
+      }
+    },
+
+    "ip-address": {
+      "patterns": [
+        {
+          "comment": "IPv4 address with optional CIDR",
+          "match": "\\b(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})(/\\d{1,2})?\\b",
+          "captures": {
+            "1": { "name": "constant.numeric.ip.ipv4.pve-firewall" },
+            "2": { "name": "constant.numeric.ip.cidr.pve-firewall" }
+          }
+        },
+        {
+          "comment": "IPv4 range with dash",
+          "match": "\\b(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})-(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})\\b",
+          "captures": {
+            "1": { "name": "constant.numeric.ip.ipv4.pve-firewall" },
+            "2": { "name": "constant.numeric.ip.ipv4.pve-firewall" }
+          }
+        }
+      ]
+    },
+
+    "ipset-reference": {
+      "comment": "IPSet reference: +ipsetname or dc/ipsetname",
+      "match": "(\\+)(\\S+)",
+      "captures": {
+        "1": { "name": "punctuation.definition.ipset-ref.pve-firewall" },
+        "2": { "name": "entity.name.tag.ipset-name.pve-firewall" }
+      }
+    },
+
+    "alias-reference": {
+      "comment": "Alias reference prefixed with dc/",
+      "match": "\\b(dc/)(\\S+)",
+      "captures": {
+        "1": { "name": "punctuation.definition.alias-scope.pve-firewall" },
+        "2": { "name": "entity.name.tag.alias-name.pve-firewall" }
+      }
+    },
+
+    "port-number": {
+      "patterns": [
+        {
+          "comment": "Port range: 80:85",
+          "match": "\\b(\\d{1,5})(:)(\\d{1,5})\\b",
+          "captures": {
+            "1": { "name": "constant.numeric.port.pve-firewall" },
+            "2": { "name": "punctuation.separator.port-range.pve-firewall" },
+            "3": { "name": "constant.numeric.port.pve-firewall" }
+          }
+        },
+        {
+          "comment": "Single port number (only after -dport/-sport/-p flags or commas in port lists)",
+          "match": "(?<=-(?:dport|sport)\\s)\\d{1,5}\\b|(?<=,)\\d{1,5}\\b",
+          "name": "constant.numeric.port.pve-firewall"
+        }
+      ]
+    },
+
+    "ipset-entry": {
+      "comment": "IP entries inside IPSET sections (bare IPs on a line)",
+      "match": "^\\s*(!)?\\s*(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})(/\\d{1,2})?\\s*(?=#|$)",
+      "captures": {
+        "1": { "name": "keyword.operator.negate.pve-firewall" },
+        "2": { "name": "constant.numeric.ip.ipv4.pve-firewall" },
+        "3": { "name": "constant.numeric.ip.cidr.pve-firewall" }
+      }
+    }
+  }
+}

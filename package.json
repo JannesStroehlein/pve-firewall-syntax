@@ -1,0 +1,53 @@
+{
+  "name": "pve-firewall-syntax",
+  "displayName": "Proxmox VE Firewall Syntax",
+  "description": "Syntax highlighting, snippets, and language support for Proxmox VE firewall configuration files (.fw)",
+  "version": "0.1.0",
+  "publisher": "strawbase",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "proxmox",
+    "pve",
+    "firewall",
+    "homelab",
+    "networking"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/strawbase/pve-firewall-syntax"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "pve-firewall",
+        "aliases": [
+          "PVE Firewall",
+          "Proxmox Firewall"
+        ],
+        "extensions": [
+          ".fw"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pve-firewall",
+        "scopeName": "source.pve-firewall",
+        "path": "./syntaxes/pve-firewall.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "pve-firewall",
+        "path": "./snippets/pve-firewall.json"
+      }
+    ]
+  }
+}
