@@ -3,13 +3,46 @@
   "displayName": "Proxmox VE Firewall Syntax",
   "description": "Syntax highlighting, snippets, and language support for Proxmox VE firewall configuration files (.fw)",
   "version": "0.1.0",
+  "author": {
+    "name": "Jannes Ströhlein"
+  },
   "publisher": "strawbase",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.75.0",
+    "node": ">=16"
   },
+  "main": "./dist/extension.js",
+  "bin": {
+    "pve-fw-check": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "syntaxes",
+    "snippets",
+    "language-configuration.json",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "gen:macros": "node scripts/gen-macros.mjs",
+    "build": "bun run gen:macros && bun esbuild.mjs",
+    "watch": "bun esbuild.mjs --watch",
+    "check": "bun run gen:macros && tsc --noEmit",
+    "test": "bun run gen:macros && tsx --test test/*.test.ts",
+    "watch:esbuild": "node esbuild.mjs --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "vscode:prepublish": "bun run package",
+    "package": "bun run check && bun esbuild.mjs --production",
+    "install:ext": "bun run package && bunx @vscode/vsce package"
+  },
+  "packageManager": "bun@1.3.11",
+  "activationEvents": [
+    "onLanguage:pve-firewall"
+  ],
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Linters"
   ],
   "keywords": [
     "proxmox",
@@ -21,6 +54,25 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/strawbase/pve-firewall-syntax"
+  },
+  "dependencies": {
+    "@eslint/js": "^10.0.1",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "eslint": "^10.5.0",
+    "typescript-eslint": "^8.62.0",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.75.0",
+    "esbuild": "^0.20.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "3.8.4",
+    "tsx": "^4.7.0",
+    "typescript": "^6.0.3"
   },
   "contributes": {
     "languages": [
@@ -48,6 +100,36 @@
         "language": "pve-firewall",
         "path": "./snippets/pve-firewall.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "PVE Firewall",
+      "properties": {
+        "pveFirewall.clusterPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute or workspace-relative path to `cluster.fw`, used to resolve datacenter (`dc/`) aliases, IP sets and security groups. If empty, the server auto-discovers it."
+        },
+        "pveFirewall.node": {
+          "type": "string",
+          "default": "",
+          "description": "Default node name used to locate the matching nodes/<node>/host.fw when a file has no `# pve-fw: node=` comment."
+        },
+        "pveFirewall.warnMissingCluster": {
+          "type": "boolean",
+          "default": true,
+          "description": "Emit a hint when cluster.fw cannot be found, so dc/ references cannot be checked."
+        },
+        "pveFirewall.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the communication between VS Code and the PVE firewall language server."
+        }
+      }
+    }
   }
 }

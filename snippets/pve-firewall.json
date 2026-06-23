@@ -12,28 +12,17 @@
   },
   "Rules Section": {
     "prefix": "rules",
-    "body": [
-      "[RULES]",
-      "$0"
-    ],
+    "body": ["[RULES]", "$0"],
     "description": "Insert a [RULES] section"
   },
   "Aliases Section": {
     "prefix": "aliases",
-    "body": [
-      "[ALIASES]",
-      "${1:alias_name} ${2:192.168.1.0/24}",
-      "$0"
-    ],
+    "body": ["[ALIASES]", "${1:alias_name} ${2:192.168.1.0/24}", "$0"],
     "description": "Insert an [ALIASES] section"
   },
   "IPSet Section": {
     "prefix": "ipset",
-    "body": [
-      "[IPSET ${1:name}]",
-      "${2:192.168.1.0/24}",
-      "$0"
-    ],
+    "body": ["[IPSET ${1:name}]", "${2:192.168.1.0/24}", "$0"],
     "description": "Insert an [IPSET name] section"
   },
   "Security Group Section": {
