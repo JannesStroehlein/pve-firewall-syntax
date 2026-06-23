@@ -13,13 +13,13 @@ const common = {
 };
 
 const targets = [
-  // VSCode extension client — vscode is provided by the host, keep external.
+  // VSCode extension client - vscode is provided by the host, keep external.
   {
     entryPoints: ['src/client/extension.ts'],
     outfile: 'dist/extension.js',
     external: ['vscode']
   },
-  // Language server — runs in its own Node process, no vscode runtime.
+  // Language server - runs in its own Node process, no vscode runtime.
   {
     entryPoints: ['src/server/server.ts'],
     outfile: 'dist/server.js',

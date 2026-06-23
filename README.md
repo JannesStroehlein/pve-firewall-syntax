@@ -18,7 +18,7 @@ Live in the editor, or on demand via the CLI:
 - **Unresolved security group references** (`GROUP webserver`)
 - Duplicate alias / IP set / group definitions
 
-IP set members may be literal IPs/CIDRs/ranges **or** alias references (bare or `dc/`-scoped) — both are resolved.
+IP set members may be literal IPs/CIDRs/ranges **or** alias references (bare or `dc/`-scoped) - both are resolved.
 
 ### Cross-file resolution
 
@@ -30,7 +30,7 @@ Datacenter-scoped symbols (`dc/` aliases & IP sets, security groups) live in `cl
    # pve-fw: node=pve1
    ```
 2. The `pveFirewall.clusterPath` setting / `--cluster` CLI flag.
-3. Auto-discovery — walking up directories for `cluster.fw` or `firewall/cluster.fw` (mirrored `/etc/pve` layout).
+3. Auto-discovery - walking up directories for `cluster.fw` or `firewall/cluster.fw` (mirrored `/etc/pve` layout).
 
 A file named `cluster.fw` resolves its own `dc/` references. If no `cluster.fw` is found, `dc/` references are left unchecked (a hint is emitted, configurable).
 
@@ -67,16 +67,16 @@ Macro data is **generated at build time** from the upstream Proxmox source (`res
 - **Comment toggling** with `Ctrl+/` / `Cmd+/`
 
 - **Snippets** for common patterns:
-  - `options` — `[OPTIONS]` section
-  - `rules` — `[RULES]` section
-  - `ipset` — `[IPSET name]` section
-  - `group` — `[group name]` section
-  - `ssh`, `http`, `https`, `dns`, `ping` — common macro rules
-  - `in-accept`, `in-drop`, `out-accept` — generic rules
-  - `group-web` — web server security group
-  - `group-mgmt` — management access security group
-  - `vm-fw` — full VM/CT firewall template
-  - `cluster-fw` — full cluster.fw template
+  - `options` - `[OPTIONS]` section
+  - `rules` - `[RULES]` section
+  - `ipset` - `[IPSET name]` section
+  - `group` - `[group name]` section
+  - `ssh`, `http`, `https`, `dns`, `ping` - common macro rules
+  - `in-accept`, `in-drop`, `out-accept` - generic rules
+  - `group-web` - web server security group
+  - `group-mgmt` - management access security group
+  - `vm-fw` - full VM/CT firewall template
+  - `cluster-fw` - full cluster.fw template
 
 ## Supported files
 
@@ -93,7 +93,7 @@ The extension activates for any file with a `.fw` extension. This covers:
 
 ```bash
 # Package the extension (requires vsce)
-npm install -g @vscode/vsce
+bun install -g @vscode/vsce
 cd pve-firewall-syntax
 vsce package
 
@@ -155,10 +155,10 @@ GROUP mgmt-access
 
 ## CLI checker
 
-The same engine runs standalone as `pve-fw-check` — useful in pre-commit hooks or CI.
+The same engine runs standalone as `pve-fw-check` - useful in pre-commit hooks or CI.
 
 ```bash
-# After building (npm run build), or once installed globally:
+# After building (bun run build), or once installed globally:
 node dist/cli.js /etc/pve/firewall/cluster.fw
 pve-fw-check /etc/pve/firewall/*.fw
 
@@ -208,6 +208,7 @@ Built-in macros are generated from `resources/macros.json`, vendored from
 To refresh against upstream:
 
 ```bash
+mkdir resources
 curl -sL "https://git.proxmox.com/?p=proxmox-ve-rs.git;a=blob_plain;f=proxmox-ve-config/resources/macros.json;hb=refs/heads/master" -o resources/macros.json
 bun run gen:macros
 ```

@@ -6,7 +6,7 @@
   "author": {
     "name": "Jannes Ströhlein"
   },
-  "publisher": "strawbase",
+  "publisher": "JannesStroehlein",
   "license": "MIT",
   "engines": {
     "vscode": "^1.75.0",
@@ -53,7 +53,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/strawbase/pve-firewall-syntax"
+    "url": "https://github.com/JannesStroehlein/pve-firewall-syntax"
   },
   "dependencies": {
     "@eslint/js": "^10.0.1",
@@ -93,12 +93,6 @@
         "language": "pve-firewall",
         "scopeName": "source.pve-firewall",
         "path": "./syntaxes/pve-firewall.tmLanguage.json"
-      }
-    ],
-    "snippets": [
-      {
-        "language": "pve-firewall",
-        "path": "./snippets/pve-firewall.json"
       }
     ],
     "configuration": {

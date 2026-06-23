@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { MACROS, MACRO_INFO } from '../src/core/index';
 
 test('macros generated from upstream macros.json', () => {
-  assert.ok(MACROS.length >= 88, `expected >=88 macros, got ${MACROS.length}`);
+  assert.ok(MACROS.length >= 88, `expected >= 88 macros, got ${MACROS.length}`);
   assert.equal(MACROS.length, Object.keys(MACRO_INFO).length);
 });
 

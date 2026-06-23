@@ -1,5 +1,5 @@
 // Core data model for a parsed PVE firewall (.fw) document.
-// Pure types + lightweight helpers. No vscode imports — shared by CLI and server.
+// Pure types + lightweight helpers. No vscode imports - shared by CLI and server.
 
 /** Zero-based line/character position (LSP-compatible). */
 export interface Position {
@@ -62,6 +62,8 @@ export interface AliasDef {
   value: string;
   valueRange: Range;
   line: number;
+  /** Trailing `# comment` on the definition line, if any. */
+  comment?: string;
 }
 
 /** An entry inside [IPSET name]: `[!]ip[/cidr]`. */
@@ -70,11 +72,13 @@ export interface IpsetEntry {
   value: string;
   valueRange: Range;
   line: number;
+  /** Trailing `# comment` on the entry line, if any. */
+  comment?: string;
 }
 
 /** A token reference inside a rule (alias, ipset, ip, port) with its range. */
 export interface RuleRef {
-  /** "alias" → bare alias or dc/alias; "ipset" → +name or +dc/name. */
+  /** "alias" -> bare alias or dc/alias; "ipset" -> +name or +dc/name. */
   kind: 'alias' | 'ipset';
   /** Datacenter scope, i.e. the `dc/` prefix was present. */
   dc: boolean;
@@ -98,6 +102,10 @@ export interface Rule {
   refs: RuleRef[];
   /** IPv4 / CIDR / range / port literals for syntax validation. */
   literals: { text: string; range: Range; context: 'ip' | 'port' }[];
+  /** Trimmed code text of the rule line (no inline comment), for hovers. */
+  raw?: string;
+  /** Trailing `# comment` on the rule line, if any. */
+  comment?: string;
 }
 
 export interface Section {
@@ -108,6 +116,8 @@ export interface Section {
   name?: string;
   nameRange?: Range;
   headerRange: Range;
+  /** Trailing `# comment` on the section header line, if any. */
+  comment?: string;
   options: OptionEntry[];
   aliases: AliasDef[];
   ipsetEntries: IpsetEntry[];

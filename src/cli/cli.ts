@@ -1,4 +1,4 @@
-// pve-fw-check — standalone CLI checker. Shares the core engine with the language server.
+// pve-fw-check - standalone CLI checker. Shares the core engine with the language server.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';

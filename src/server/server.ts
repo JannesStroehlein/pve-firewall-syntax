@@ -20,14 +20,16 @@ import {
 import { fileURLToPath } from "node:url";
 import {
   Diagnostic as CoreDiagnostic,
+  FwDocument,
   MACRO_INFO,
   ResolutionContext,
   Resolver,
   parse,
+  resolveSymbol,
   validate,
 } from "../core/index";
 import { complete } from "./completion";
-import { renderMacro } from "./render";
+import { renderAlias, renderGroup, renderIpset, renderMacro } from "./render";
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -68,13 +70,29 @@ function toLsp(d: CoreDiagnostic): LspDiagnostic {
   };
 }
 
-function validateDocument(doc: TextDocument): void {
+// Parse cache keyed by document version. A change re-parses (via validateDocument);
+// hover/completion on the same version reuse that parse instead of redoing it.
+const analyses = new Map<string, { version: number; doc: FwDocument }>();
+
+function analyze(doc: TextDocument): FwDocument {
+  const cached = analyses.get(doc.uri);
+  if (cached && cached.version === doc.version) return cached.doc;
   const fsPath = uriToPath(doc.uri);
   const parsed = parse(doc.getText(), fsPath ?? doc.uri);
-  const ctx = resolver.build(fsPath, parsed, {
+  analyses.set(doc.uri, { version: doc.version, doc: parsed });
+  return parsed;
+}
+
+function contextFor(doc: TextDocument, parsed: FwDocument): ResolutionContext {
+  return resolver.build(uriToPath(doc.uri), parsed, {
     clusterPath: settings.clusterPath,
     node: settings.node,
   });
+}
+
+function validateDocument(doc: TextDocument): void {
+  const parsed = analyze(doc);
+  const ctx = contextFor(doc, parsed);
   const diagnostics = validate(parsed, ctx, {
     warnMissingCluster: settings.warnMissingCluster,
   }).map(toLsp);
@@ -146,19 +164,33 @@ documents.onDidChangeContent((e) => {
 });
 
 documents.onDidClose((e) => {
+  analyses.delete(e.document.uri);
   connection.sendDiagnostics({ uri: e.document.uri, diagnostics: [] });
 });
+
+// Characters that belong to a completion token. Includes `-`/`+`/`/` so that
+// flag (`-source`), IP set (`+management`) and scoped tokens are fully replaced
+// rather than appended after the prefix the user already typed.
+const TOKEN_CHAR = /[A-Za-z0-9_+/.-]/;
 
 connection.onCompletion((params): CompletionItem[] => {
   const doc = documents.get(params.textDocument.uri);
   if (!doc) return [];
-  const fsPath = uriToPath(doc.uri);
-  const parsed = parse(doc.getText(), fsPath ?? doc.uri);
-  const ctx = resolver.build(fsPath, parsed, {
-    clusterPath: settings.clusterPath,
-    node: settings.node,
-  });
-  return complete(doc.getText(), params.position, ctx);
+  const ctx = contextFor(doc, analyze(doc));
+  const items = complete(doc.getText(), params.position, ctx);
+
+  // Replace the whole token under the cursor, so a typed `-`/`+` prefix is not
+  // duplicated (e.g. `-so` + `-source` would otherwise insert `--source`).
+  const pos = params.position;
+  const line = doc.getText().split(/\r?\n/)[pos.line] ?? "";
+  let start = pos.character;
+  while (start > 0 && TOKEN_CHAR.test(line[start - 1])) start--;
+  const range: Range = { start: { line: pos.line, character: start }, end: pos };
+  for (const it of items) {
+    const newText = it.insertText ?? it.label;
+    it.textEdit = { range, newText };
+  }
+  return items;
 });
 
 function inRange(r: Range, pos: Position): boolean {
@@ -169,15 +201,26 @@ function inRange(r: Range, pos: Position): boolean {
 connection.onHover((params: HoverParams): Hover | null => {
   const doc = documents.get(params.textDocument.uri);
   if (!doc) return null;
-  const fsPath = uriToPath(doc.uri);
-  const parsed = parse(doc.getText(), fsPath ?? doc.uri);
-  const ctx = resolver.build(fsPath, parsed, {
-    clusterPath: settings.clusterPath,
-    node: settings.node,
-  });
+  const parsed = analyze(doc);
+  const ctx = contextFor(doc, parsed);
   const pos = params.position;
 
   for (const section of parsed.sections) {
+    // Definition sites: alias name, IPSET/group header name.
+    if (section.kind === "ALIASES") {
+      for (const a of section.aliases) {
+        if (inRange(a.nameRange, pos)) {
+          return md(renderAlias(a.name, ctx.local.aliases.get(a.name)), a.nameRange);
+        }
+      }
+    }
+    if (section.kind === "IPSET" && section.name && section.nameRange && inRange(section.nameRange, pos)) {
+      return md(renderIpset(`+${section.name}`, ctx.local.ipsets.get(section.name)), section.nameRange);
+    }
+    if (section.kind === "GROUP" && section.name && section.nameRange && inRange(section.nameRange, pos)) {
+      return md(describeGroup(section.name, ctx), section.nameRange);
+    }
+
     for (const rule of section.rules) {
       if (rule.macro && inRange(rule.macro.range, pos)) {
         const info = MACRO_INFO[rule.macro.value];
@@ -200,33 +243,16 @@ function md(value: string, range: Range): Hover {
 }
 
 function describeGroup(name: string, ctx: ResolutionContext): string {
-  const found = ctx.local.groups.get(name) ?? ctx.dc.groups.get(name);
-  return found
-    ? `**group ${name}** — security group
-    ${found.range}
-    `
-    : `**${name}** — unresolved security group`;
+  const r = resolveSymbol("group", name, false, ctx);
+  return renderGroup(name, r.def);
 }
 
 function describeRef(
   ref: { kind: "alias" | "ipset"; dc: boolean; name: string },
   ctx: ResolutionContext,
 ): string {
-  // Bare refs resolve local then datacenter; dc/ refs only the datacenter.
-  if (ref.kind === "alias") {
-    const a = ref.dc
-      ? ctx.dc.aliases.get(ref.name)
-      : (ctx.local.aliases.get(ref.name) ?? ctx.dc.aliases.get(ref.name));
-    const label = ref.dc ? `dc/${ref.name}` : ref.name;
-    return a
-      ? `**${label}** — alias → \`${a.value ?? ""}\``
-      : `**${label}** — unresolved alias`;
-  }
-  const s = ref.dc
-    ? ctx.dc.ipsets.get(ref.name)
-    : (ctx.local.ipsets.get(ref.name) ?? ctx.dc.ipsets.get(ref.name));
-  const label = ref.dc ? `+dc/${ref.name}` : `+${ref.name}`;
-  return s ? `**${label}** — IP set` : `**${label}** — unresolved IP set`;
+  const r = resolveSymbol(ref.kind, ref.name, ref.dc, ctx);
+  return ref.kind === "alias" ? renderAlias(r.label, r.def) : renderIpset(r.label, r.def);
 }
 
 documents.listen(connection);

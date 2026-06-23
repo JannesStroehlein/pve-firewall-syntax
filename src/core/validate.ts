@@ -10,7 +10,12 @@ import {
   RULE_FLAG_SET
 } from './builtins';
 import { Diagnostic, FwDocument, Range, Rule, Section } from './model';
-import { ResolutionContext, collectSymbols } from './symbols';
+import {
+  ResolutionContext,
+  ResolvedRef,
+  collectSymbols,
+  resolveSymbol
+} from './symbols';
 
 export interface ValidateOptions {
   /** Emit a hint when cluster.fw is missing so dc/ refs cannot be checked. */
@@ -112,7 +117,7 @@ export function validate(
       severity: 'hint',
       code: 'no-cluster',
       message:
-        'cluster.fw not found — dc/ aliases, IP sets and security groups cannot be verified.'
+        'cluster.fw not found - dc/ aliases, IP sets and security groups cannot be verified.'
     });
   }
 
@@ -208,40 +213,17 @@ function validateIpsetEntries(
       continue;
 
     // IP set members may also be alias references (local or dc/ scoped).
-    if (e.value.startsWith('dc/')) {
-      touchedDc = true;
-      const name = e.value.slice(3);
-      if (ctx.hasCluster && !ctx.dc.aliases.has(name)) {
-        diags.push(
-          err(
-            e.valueRange,
-            'unresolved-alias',
-            `Datacenter alias "dc/${name}" is not defined in cluster.fw.`
-          )
-        );
-      }
-      continue;
-    }
-    if (RE_ALIAS_NAME.test(e.value)) {
-      // Bare alias: local first, then datacenter fallback (as PVE resolves it).
-      if (ctx.local.aliases.has(e.value) || ctx.dc.aliases.has(e.value))
-        continue;
-      if (!ctx.hasCluster) {
-        touchedDc = true;
-        continue;
-      }
+    const dc = e.value.startsWith('dc/');
+    const name = dc ? e.value.slice(3) : e.value;
+    if (!RE_ALIAS_NAME.test(name)) {
       diags.push(
-        err(
-          e.valueRange,
-          'unresolved-alias',
-          `Alias "${e.value}" is not defined.`
-        )
+        err(e.valueRange, 'bad-ip', `Invalid IP set entry "${e.value}".`)
       );
       continue;
     }
-    diags.push(
-      err(e.valueRange, 'bad-ip', `Invalid IP set entry "${e.value}".`)
-    );
+    if (reportRef(resolveSymbol('alias', name, dc, ctx), e.valueRange, diags)) {
+      touchedDc = true;
+    }
   }
   return touchedDc;
 }
@@ -255,21 +237,11 @@ function validateRule(
   let touchedDc = false;
 
   if (rule.groupRef) {
-    const name = rule.groupRef.name;
-    if (!ctx.local.groups.has(name) && !ctx.dc.groups.has(name)) {
-      if (ctx.hasCluster || ctx.local.groups.size > 0) {
-        diags.push(
-          err(
-            rule.groupRef.range,
-            'unresolved-group',
-            `Security group "${name}" is not defined.`
-          )
-        );
-      } else {
-        touchedDc = true;
-      }
-    }
-    return touchedDc;
+    return reportRef(
+      resolveSymbol('group', rule.groupRef.name, false, ctx),
+      rule.groupRef.range,
+      diags
+    );
   }
 
   if (rule.direction && !DIRECTION_SET.has(rule.direction.value)) {
@@ -351,58 +323,48 @@ function validateRule(
   }
 
   for (const ref of rule.refs) {
-    if (resolveRef(ref, ctx, diags)) touchedDc = true;
+    if (
+      reportRef(
+        resolveSymbol(ref.kind, ref.name, ref.dc, ctx),
+        ref.range,
+        diags
+      )
+    ) {
+      touchedDc = true;
+    }
   }
 
   return touchedDc;
 }
 
+const REF_CODE = {
+  alias: 'unresolved-alias',
+  ipset: 'unresolved-ipset',
+  group: 'unresolved-group'
+} as const;
+const REF_NOUN = {
+  alias: 'Alias',
+  ipset: 'IP set',
+  group: 'Security group'
+} as const;
+
 /**
- * Resolve an alias/ipset reference. A bare reference resolves against local
- * symbols first, then falls back to datacenter (cluster.fw) symbols — this is
- * how PVE itself resolves guest rules. A `dc/`-scoped reference only checks the
- * datacenter. Returns true when datacenter scope was needed but no cluster.fw
- * was available, so the caller can emit the "no-cluster" hint instead of a hard
- * error.
+ * Emit a diagnostic for an unresolved reference. Returns true when the reference
+ * could not be checked because cluster.fw is unavailable (scope "unknown"), so
+ * the caller can raise the single "no-cluster" hint instead of a false error.
  */
-function resolveRef(
-  ref: { kind: 'alias' | 'ipset'; dc: boolean; name: string; range: Range },
-  ctx: ResolutionContext,
-  diags: Diagnostic[]
-): boolean {
-  const localMap = ref.kind === 'alias' ? ctx.local.aliases : ctx.local.ipsets;
-  const dcMap = ref.kind === 'alias' ? ctx.dc.aliases : ctx.dc.ipsets;
-  const code = ref.kind === 'alias' ? 'unresolved-alias' : 'unresolved-ipset';
-  const label =
-    ref.kind === 'alias'
-      ? ref.dc
-        ? `dc/${ref.name}`
-        : ref.name
-      : ref.dc
-        ? `+dc/${ref.name}`
-        : `+${ref.name}`;
-  const noun = ref.kind === 'alias' ? 'Alias' : 'IP set';
-
-  if (ref.dc) {
-    // Explicit datacenter scope.
-    if (!ctx.hasCluster) return true; // cluster unknown → defer to the no-cluster hint
-    if (!dcMap.has(ref.name)) {
-      diags.push(
-        err(
-          ref.range,
-          code,
-          `Datacenter ${noun.toLowerCase()} "${label}" is not defined in cluster.fw.`
-        )
-      );
-    }
-    return false;
+function reportRef(r: ResolvedRef, range: Range, diags: Diagnostic[]): boolean {
+  if (r.scope === 'unknown') return true;
+  if (r.scope === 'unresolved') {
+    const where = r.label.includes('dc/') ? ' in cluster.fw' : '';
+    diags.push(
+      err(
+        range,
+        REF_CODE[r.kind],
+        `${REF_NOUN[r.kind]} "${r.label}" is not defined${where}.`
+      )
+    );
   }
-
-  // Bare reference: local first, then datacenter fallback.
-  if (localMap.has(ref.name)) return false;
-  if (dcMap.has(ref.name)) return false;
-  if (!ctx.hasCluster) return true; // could still be a datacenter symbol we can't see
-  diags.push(err(ref.range, code, `${noun} "${label}" is not defined.`));
   return false;
 }
 

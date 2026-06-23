@@ -18,7 +18,7 @@ import {
   ResolutionContext,
   SECTION_NAMES
 } from '../core/index';
-import { renderMacro } from './render';
+import { renderAlias, renderGroup, renderIpset, renderMacro } from './render';
 
 const item = (
   label: string,
@@ -31,6 +31,10 @@ const item = (
   detail,
   insertText
 });
+
+function stripMdControlChars(mdString: string): string {
+  return mdString.replaceAll(/\*\*|\*|_/g, '');
+}
 
 /** Determine the section kind that owns `line` by scanning headers above it. */
 function sectionAt(
@@ -81,35 +85,65 @@ function aliasAndIpsetItems(
   withDc: boolean
 ): CompletionItem[] {
   const out: CompletionItem[] = [];
-  for (const a of ctx.local.aliases.values())
+  // Datacenter symbols are referenced bare (the dc/ prefix is optional and local
+  // names shadow them), so suggest bare labels and let local definitions win.
+  const aliasSeen = new Set<string>();
+  const ipsetSeen = new Set<string>();
+
+  for (const a of ctx.local.aliases.values()) {
+    aliasSeen.add(a.name);
     out.push(
-      item(a.name, CompletionItemKind.Variable, `alias → ${a.value ?? ''}`)
+      item(
+        a.name,
+        CompletionItemKind.Variable,
+        stripMdControlChars(renderAlias(a.name, a))
+      )
     );
-  for (const s of ctx.local.ipsets.values())
-    out.push(item(`+${s.name}`, CompletionItemKind.Reference, 'IP set'));
+  }
+  for (const s of ctx.local.ipsets.values()) {
+    ipsetSeen.add(s.name);
+    out.push(
+      item(
+        `+${s.name}`,
+        CompletionItemKind.Reference,
+        stripMdControlChars(renderIpset(s.name, s))
+      )
+    );
+  }
+
   if (withDc) {
-    for (const a of ctx.dc.aliases.values())
+    for (const a of ctx.dc.aliases.values()) {
+      if (aliasSeen.has(a.name)) continue;
       out.push(
         item(
-          `dc/${a.name}`,
+          a.name,
           CompletionItemKind.Variable,
-          `dc alias → ${a.value ?? ''}`
+          stripMdControlChars(renderAlias(a.name, a))
         )
       );
-    for (const s of ctx.dc.ipsets.values())
+    }
+    for (const s of ctx.dc.ipsets.values()) {
+      if (ipsetSeen.has(s.name)) continue;
       out.push(
-        item(`+dc/${s.name}`, CompletionItemKind.Reference, 'dc IP set')
+        item(
+          `+${s.name}`,
+          CompletionItemKind.Reference,
+          stripMdControlChars(renderIpset(s.name, s))
+        )
       );
+    }
   }
   return out;
 }
 
 function groupItems(ctx: ResolutionContext): CompletionItem[] {
   const out: CompletionItem[] = [];
-  for (const g of ctx.local.groups.values())
-    out.push(item(g.name, CompletionItemKind.Class, 'security group'));
-  for (const g of ctx.dc.groups.values())
-    out.push(item(g.name, CompletionItemKind.Class, 'security group'));
+  const seen = new Set<string>();
+  for (const g of [...ctx.local.groups.values(), ...ctx.dc.groups.values()]) {
+    if (seen.has(g.name)) continue;
+    seen.add(g.name);
+    out.push(item(g.name, CompletionItemKind.Class, renderGroup(g.name, g)));
+  }
   return out;
 }
 
@@ -153,37 +187,107 @@ export function complete(
 
   if (kind === 'RULES' || kind === 'GROUP' || kind === 'unknown') {
     const endsWithSpace = /\s$/.test(prefix);
-    const tokens = trimmed.length ? trimmed.split(/\s+/) : [];
-    const partial = endsWithSpace ? '' : (tokens[tokens.length - 1] ?? '');
-    const prev = endsWithSpace
-      ? tokens[tokens.length - 1]
-      : tokens[tokens.length - 2];
+    const allTokens = trimmed.split(/\s+/).filter(Boolean);
+    const partial = endsWithSpace ? '' : (allTokens[allTokens.length - 1] ?? '');
+    // Tokens fully entered to the left of the one being typed.
+    const completed = endsWithSpace ? allTokens : allTokens.slice(0, -1);
 
-    // First token on the line.
-    if (tokens.length === 0 || (tokens.length === 1 && !endsWithSpace)) {
-      return [
-        ...directionItems(),
-        item('GROUP', CompletionItemKind.Keyword, 'group reference')
-      ];
+    switch (expectedCategory(completed)) {
+      case 'start':
+        return [
+          ...directionItems(),
+          item('GROUP', CompletionItemKind.Keyword, 'group reference')
+        ];
+      case 'groupName':
+        return groupItems(ctx);
+      case 'macroOrAction':
+        return [...macroItems(), ...actionItems()];
+      case 'flag':
+        return flagItems();
+      case 'proto':
+        return protocolItems();
+      case 'loglevel':
+        return logLevelItems();
+      case 'address': {
+        const items = aliasAndIpsetItems(ctx, true);
+        // `+` forces an IP set; bare allows aliases and IP sets.
+        return partial.startsWith('+')
+          ? items.filter((i) => i.label.startsWith('+'))
+          : items;
+      }
+      // port / icmptype / iface / end -> free text, nothing to suggest.
+      default:
+        return [];
     }
-
-    if (partial.startsWith('+'))
-      return aliasAndIpsetItems(ctx, true).filter((i) =>
-        i.label.startsWith('+')
-      );
-    if (partial.startsWith('-')) return flagItems();
-
-    if (prev === '-source' || prev === '-dest')
-      return aliasAndIpsetItems(ctx, true);
-    if (prev === '-p' || prev === '-proto') return protocolItems();
-    if (prev === '-log') return logLevelItems();
-    if (prev && DIRECTIONS.includes(prev as (typeof DIRECTIONS)[number]))
-      return [...macroItems(), ...actionItems()];
-    if (prev === 'GROUP') return groupItems(ctx);
-
-    // General continuation.
-    return [...actionItems(), ...flagItems()];
   }
 
   return [];
+}
+
+/** Category of token expected next in a firewall rule, given the tokens before it. */
+type RuleCategory =
+  | 'start' // direction or GROUP
+  | 'groupName'
+  | 'macroOrAction'
+  | 'flag'
+  | 'proto'
+  | 'port'
+  | 'address'
+  | 'loglevel'
+  | 'icmptype'
+  | 'iface'
+  | 'end';
+
+// Value category each flag expects after it.
+const FLAG_VALUE: Record<string, RuleCategory> = {
+  '-p': 'proto',
+  '-proto': 'proto',
+  '-dport': 'port',
+  '-sport': 'port',
+  '-source': 'address',
+  '-dest': 'address',
+  '-log': 'loglevel',
+  '-icmp-type': 'icmptype',
+  '-i': 'iface',
+  '-iface': 'iface',
+  '-o': 'iface'
+};
+
+/**
+ * Walk the rule grammar over the already-entered tokens and return what the next
+ * token must be. This is the predict set:
+ *   rule := '|'? (GROUP name | DIRECTION (MACRO '(' ACTION ')' | ACTION) flag*)
+ *   flag := '-name' value?
+ */
+function expectedCategory(tokens: string[]): RuleCategory {
+  let state: RuleCategory = 'start';
+  for (const tok of tokens) {
+    switch (state) {
+      case 'start':
+        if (tok === '|') break; // disabled-rule marker, still at start
+        state = tok === 'GROUP' ? 'groupName' : 'macroOrAction';
+        break;
+      case 'groupName':
+        state = 'end';
+        break;
+      case 'macroOrAction':
+        state = 'flag';
+        break;
+      case 'flag':
+        // A flag either consumes a value next, or (valueless) stays at flag.
+        state = FLAG_VALUE[tok] ?? 'flag';
+        break;
+      case 'proto':
+      case 'port':
+      case 'address':
+      case 'loglevel':
+      case 'icmptype':
+      case 'iface':
+        state = 'flag'; // value consumed, back to expecting flags
+        break;
+      case 'end':
+        break;
+    }
+  }
+  return state;
 }

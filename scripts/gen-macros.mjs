@@ -34,7 +34,7 @@ const body = entries
   )
   .join('\n');
 
-const ts = `// AUTO-GENERATED — do not edit. Run \`npm run gen:macros\`.
+const ts = `// AUTO-GENERATED - do not edit. Run \`npm run gen:macros\`.
 // Source: proxmox-ve-rs proxmox-ve-config/resources/macros.json (vendored in resources/).
 import { MacroInfo } from "./model";
 

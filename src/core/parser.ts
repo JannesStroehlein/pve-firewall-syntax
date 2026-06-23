@@ -1,5 +1,5 @@
 // Tolerant line-based parser for PVE firewall (.fw) files.
-// Never throws — structural problems become parseDiagnostics. Records precise ranges.
+// Never throws - structural problems become parseDiagnostics. Records precise ranges.
 
 import {
   AliasDef,
@@ -42,11 +42,12 @@ function tokenize(text: string, base: number): Token[] {
   return out;
 }
 
-/** Strip an inline `# comment`. Returns the code portion (right-padded preserved by index). */
-function stripComment(raw: string): { code: string } {
+/** Strip an inline `# comment`. Returns the code portion (indices preserved) + the comment text. */
+function stripComment(raw: string): { code: string; comment?: string } {
   const hash = raw.indexOf('#');
   if (hash === -1) return { code: raw };
-  return { code: raw.slice(0, hash) };
+  const comment = raw.slice(hash + 1).trim();
+  return { code: raw.slice(0, hash), comment: comment || undefined };
 }
 
 function classifyRef(
@@ -78,7 +79,7 @@ function classifyRef(
     return;
   }
   if (RE_IDENT.test(item)) {
-    // Bare identifier in a -source/-dest position → local alias reference.
+    // Bare identifier in a -source/-dest position -> local alias reference.
     if (flag === '-source' || flag === '-dest') {
       rule.refs.push({ kind: 'alias', dc: false, name: item, range });
       return;
@@ -137,13 +138,15 @@ const FLAGS_WITH_VALUE = new Set([
   '-icmp-type'
 ]);
 
-function parseRule(code: string, line: number): Rule {
+function parseRule(code: string, line: number, comment?: string): Rule {
   const rule: Rule = {
     line,
     disabled: false,
     flags: [],
     refs: [],
-    literals: []
+    literals: [],
+    raw: code.trim(),
+    comment
   };
   let toks = tokenize(code, 0);
   if (toks.length === 0) return rule;
@@ -260,7 +263,7 @@ export function parse(text: string, uri = 'inmemory'): FwDocument {
       }
     }
 
-    const { code } = stripComment(raw);
+    const { code, comment } = stripComment(raw);
     if (code.trim() === '') continue; // blank or comment-only
     sawNonComment = true;
 
@@ -289,6 +292,7 @@ export function parse(text: string, uri = 'inmemory'): FwDocument {
       current = newSection(kind, inner, headerRange);
       current.name = name;
       current.nameRange = nameRange;
+      current.comment = comment;
       sections.push(current);
       continue;
     }
@@ -307,7 +311,7 @@ export function parse(text: string, uri = 'inmemory'): FwDocument {
       continue;
     }
 
-    dispatchLine(current, code, line, parseDiagnostics);
+    dispatchLine(current, code, line, comment, parseDiagnostics);
   }
 
   return { uri, sections, directives, parseDiagnostics };
@@ -317,6 +321,7 @@ function dispatchLine(
   section: Section,
   code: string,
   line: number,
+  comment: string | undefined,
   diags: Diagnostic[]
 ): void {
   switch (section.kind) {
@@ -365,7 +370,8 @@ function dispatchLine(
         nameRange: rangeFrom(line, toks[0].start, toks[0].end),
         value: toks[1].text,
         valueRange: rangeFrom(line, toks[1].start, toks[1].end),
-        line
+        line,
+        comment
       };
       section.aliases.push(def);
       return;
@@ -378,19 +384,20 @@ function dispatchLine(
         negated: m[2] === '!',
         value: m[3],
         valueRange: rangeFrom(line, valStart, valStart + m[3].length),
-        line
+        line,
+        comment
       };
       section.ipsetEntries.push(entry);
       return;
     }
     case 'RULES':
     case 'GROUP': {
-      section.rules.push(parseRule(code, line));
+      section.rules.push(parseRule(code, line, comment));
       return;
     }
     default: {
-      // unknown section — accumulate as a rule-ish line so validator can still inspect it.
-      section.rules.push(parseRule(code, line));
+      // unknown section - accumulate as a rule-ish line so validator can still inspect it.
+      section.rules.push(parseRule(code, line, comment));
       return;
     }
   }
